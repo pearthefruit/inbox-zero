@@ -76,8 +76,6 @@ If you want to triage a different Gmail account:
 
 ---
 
-## Outlook Support
+## Outlook / Microsoft 365
 
-Outlook is not yet supported. It requires a different MCP (Microsoft Graph API) which is not currently wired into claude.ai's built-in integrations. Planned for a future version.
-
-If you want to contribute Outlook support, open a PR at the GitHub repo.
+Not supported. Microsoft 365 requires admin approval to connect as an MCP integration, which makes it impractical for personal use. Only Gmail is supported today.

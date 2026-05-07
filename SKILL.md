@@ -47,7 +47,7 @@ Ask all three questions at once using a single AskUserQuestion call:
 
 **Question 1 — Email Client** (header: "Email"):
 Which email client do you use?
-Options: Gmail / Outlook *(coming soon)* / Other *(coming soon)*
+Options: Gmail
 
 **Question 2 — Calendar** (header: "Calendar"):
 Reference your calendar when drafting replies? Helps suggest real availability for scheduling emails.
@@ -58,6 +58,23 @@ Where should I look for context when drafting replies? (notes, files, a database
 Options: Notes folder *(Obsidian, markdown, etc.)* / Specific file / Notion database / None
 
 For whichever context option they pick, ask a follow-up for the path or credentials. Use the AskUserQuestion call for these too if possible, otherwise ask inline.
+
+**Question 4 — Categories** (header: "Categories"):
+How do you want to sort your inbox? Each category gets a Gmail label and a description that guides how emails are classified.
+
+Show the defaults and ask if they want to keep them or define their own:
+
+Defaults:
+1. **Action needed** (`inbox-zero/action-needed`, red) — requires a response, decision, or action *(drafts replies)*
+2. **Important** (`inbox-zero/important`, orange) — worth reading, no reply needed
+3. **Noise** (`inbox-zero/noise`, gray) — newsletters, promos, alerts — safely ignored
+
+If they want to customize: ask for a list of 2–5 categories. For each, collect:
+- A display name (used as the Gmail label, e.g. `inbox-zero/urgent`)
+- A one-sentence description of what belongs in it
+- Whether to draft replies for emails in this category (yes/no)
+
+Accept blank input as "keep defaults".
 
 ### Step 1.3: Verify Connections
 
@@ -71,7 +88,7 @@ For whichever context option they pick, ask a follow-up for the path or credenti
 
 **If Notion:** Save the token and DB ID — no upfront verification needed.
 
-**If Outlook or Other:** Tell them Outlook is coming soon. Gmail is supported today. Stop.
+**If anything other than Gmail:** Tell them only Gmail is supported. Stop.
 
 ### Step 1.4: Save Config
 
@@ -98,6 +115,29 @@ mkdir -p ~/.inbox-zero
     "days_back": 30,
     "max_emails": 30
   },
+  "categories": [
+    {
+      "id": "action_needed",
+      "label": "inbox-zero/action-needed",
+      "color": "#fb4c2f",
+      "description": "Requires a response, decision, or action from me",
+      "draft": true
+    },
+    {
+      "id": "important",
+      "label": "inbox-zero/important",
+      "color": "#ffad47",
+      "description": "Worth reading but no reply needed",
+      "draft": false
+    },
+    {
+      "id": "noise",
+      "label": "inbox-zero/noise",
+      "color": "#999999",
+      "description": "Can be safely ignored — newsletters, promos, automated alerts",
+      "draft": false
+    }
+  ],
   "onboarding_complete": true
 }
 ```
@@ -118,19 +158,22 @@ If no unread emails: tell the user "Your inbox is clean — no unread emails in 
 
 ## Phase 3: Classify
 
-Read [classification-rules.md](classification-rules.md) for detailed criteria, then classify each thread:
+Read the user's categories from `config.categories`. Build the classification criteria dynamically:
 
-- **action_needed** — requires a response, decision, or act from the user
-- **important** — worth reading, no reply needed
-- **noise** — safely ignored
+```
+Classify this email into exactly one of the following categories:
+{for each category in config.categories}
+- {category.id}: {category.description}
+{end}
+```
 
-Be decisive. Every email gets exactly one category.
+Use [classification-rules.md](classification-rules.md) as supporting guidance for edge cases, but the user's category descriptions are authoritative. Every email gets exactly one category. When in doubt, assign the last category (typically the catch-all / lowest-priority one).
 
 ---
 
 ## Phase 4: Context & Drafts *(Full Triage only — skip in Classify-Only mode)*
 
-For each `action_needed` email:
+For each email classified into a category where `draft: true` in `config.categories`:
 
 **4a. Gather calendar context** (skip if `calendar.type` is `"none"`):
 Fetch the next `calendar.days_ahead` days of events. Note free slots, busy periods, and anything relevant to the email topic.
@@ -149,12 +192,9 @@ If you cannot write a useful draft (completely ambiguous request, no actionable 
 
 ## Phase 5: Apply Labels *(Full Triage only)*
 
-Ensure these labels exist (create if missing):
-- `inbox-zero/action-needed` — red `#fb4c2f`
-- `inbox-zero/important` — orange `#ffad47`
-- `inbox-zero/noise` — gray `#999999`
-
-Apply the appropriate label to each thread.
+For each category in `config.categories`:
+- Ensure the label `category.label` exists (create with `category.color` if missing)
+- Apply that label to all threads classified into that category
 
 ⚠️ **If label creation fails with "insufficient authentication scopes":** Skip labeling silently and note it in the report with the fix. See [mcp-setup.md](mcp-setup.md) for how to reconnect with write access.
 
@@ -164,44 +204,33 @@ Apply the appropriate label to each thread.
 
 ### Step 6.1: Print the Triage Report
 
+Print one section per category, in the order they appear in `config.categories`. For categories with `draft: true`, show draft summaries. For categories with `draft: false`, list subject and sender only.
+
 ```
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   INBOX ZERO  |  {today's date}
   {N} emails processed  •  last 30 days
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-ACTION NEEDED  ({N} emails, {N} drafts created)
+{CATEGORY LABEL — UPPERCASE}  ({N} emails{, N drafts created})
 
   1. {Subject}
      From: {Name} <{email}>
-     Draft: {one-line summary of the drafted reply}
+     Draft: {one-line summary}        ← only for draft:true categories
 
   2. {Subject}
      From: {Name} <{email}>
      Draft: [skipped — {reason}]
 
-IMPORTANT, NO ACTION  ({N} emails)
+{NEXT CATEGORY}  ({N} emails)
 
   1. {Subject} — {sender}
   2. {Subject} — {sender}
-
-NOISE  ({N} emails)
-
-  Newsletters & Digests
-  1. {Subject} — {sender}
-
-  Promotions
-  2. {Subject} — {sender}
-
-  Automated Notifications
-  3. {Subject} — {sender}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 {Labels applied. / ⚠️ Labels skipped — see note above.}
 {N drafts created. Review Gmail Drafts to send replies.}
 ```
-
-Group noise by sub-category (Newsletters, Promotions, Automated Notifications) for scannability.
 
 ### Step 6.2: Offer Follow-Up
 

@@ -16,5 +16,28 @@
     "days_back": 30,
     "max_emails": 30
   },
+  "categories": [
+    {
+      "id": "action_needed",
+      "label": "inbox-zero/action-needed",
+      "color": "#fb4c2f",
+      "description": "Requires a response, decision, or action from me",
+      "draft": true
+    },
+    {
+      "id": "important",
+      "label": "inbox-zero/important",
+      "color": "#ffad47",
+      "description": "Worth reading but no reply needed",
+      "draft": false
+    },
+    {
+      "id": "noise",
+      "label": "inbox-zero/noise",
+      "color": "#999999",
+      "description": "Can be safely ignored — newsletters, promos, automated alerts",
+      "draft": false
+    }
+  ],
   "onboarding_complete": true
 }
