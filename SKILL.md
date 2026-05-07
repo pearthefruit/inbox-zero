@@ -1,118 +1,85 @@
 ---
 name: inbox-zero
 description: Triage unread emails (last 30 days), draft replies using calendar and notes context, apply labels, and print a triage report. Invoke with /inbox-zero.
-version: 1.0.0
+version: 2.0.0
 ---
 
 # Inbox Zero
 
-You are an AI email assistant. When invoked, you triage unread emails, draft replies for anything that needs a response, apply organizational labels, and produce a clean triage report.
+AI-powered email triage for Gmail. Classifies your unread emails into three buckets, drafts replies for anything that needs a response using your calendar and notes as context, applies labels to organize your inbox, and prints a clean triage report.
 
-**You never send emails.** You only create drafts. The user reviews and sends manually.
+## Core Principles
 
----
-
-## Step 1: Load Configuration
-
-Read `~/.inbox-zero/config.json`.
-
-- If the file **does not exist**, run the **Setup Wizard** below, then continue to Step 2.
-- If the file **exists**, skip to Step 2.
+1. **Never send — only draft.** You create drafts. The user reviews and sends manually. This is non-negotiable.
+2. **Classify decisively.** Every email gets a category. No "maybe" pile. When in doubt, lean toward `noise`.
+3. **Context before keys.** For action-needed emails, gather calendar and notes context *before* writing a single word of the draft. A contextless draft is worse than no draft.
+4. **Short is better.** Match the length of the reply to the length of the ask. Never pad. No filler pleasantries.
 
 ---
 
-## Setup Wizard
+## Phase 0: Detect Mode
 
-Run this once when no config exists.
+Check for a mode signal in the user's invocation:
 
-### 1. Introduction
+- **"quick"** or **"scan only"** → **Classify-Only mode**: skip drafting, skip labels, just classify and report.
+- **"reconfigure"** or **"reset"** → **Reconfigure mode**: delete `~/.inbox-zero/config.json` and run Phase 1 (Setup Wizard).
+- **Anything else (default)** → **Full Triage mode**: classify + draft + label + report.
+
+Then check `~/.inbox-zero/config.json`:
+- If the file **does not exist** → run Phase 1 (Setup Wizard), then continue.
+- If the file **exists** → skip to Phase 2.
+
+---
+
+## Phase 1: Setup Wizard
+
+Run this when no config exists or the user reconfigures.
+
+### Step 1.1: Introduction
 
 Tell the user:
 
-"Welcome to Inbox Zero. I'll help you triage your unread emails, draft replies with context from your calendar and notes, and keep your inbox organized.
+"Welcome to Inbox Zero. I need to set up three things before we start — this takes about 2 minutes."
 
-I need to set up three things:
-1. **Email** — where your emails live
-2. **Calendar** — to help draft scheduling-aware replies
-3. **Context source** — notes, files, or a database I can reference when drafting replies
+### Step 1.2: Ask All Setup Questions
 
-This takes about 2 minutes."
+Ask all three questions at once using a single AskUserQuestion call:
 
-### 2. Email Client
+**Question 1 — Email Client** (header: "Email"):
+Which email client do you use?
+Options: Gmail / Outlook *(coming soon)* / Other *(coming soon)*
 
-Ask: "Which email client do you use?
-(1) Gmail
-(2) Outlook *(coming soon)*
-(3) Other *(coming soon)*"
+**Question 2 — Calendar** (header: "Calendar"):
+Reference your calendar when drafting replies? Helps suggest real availability for scheduling emails.
+Options: Google Calendar *(recommended)* / Skip
 
-**If Gmail:**
-Try to list Gmail labels to verify the connection is working. If it succeeds, continue and note `"type": "gmail"` in config.
+**Question 3 — Context Source** (header: "Context"):
+Where should I look for context when drafting replies? (notes, files, a database, etc.)
+Options: Notes folder *(Obsidian, markdown, etc.)* / Specific file / Notion database / None
 
-If it fails, tell the user:
+For whichever context option they pick, ask a follow-up for the path or credentials. Use the AskUserQuestion call for these too if possible, otherwise ask inline.
 
-"To connect Gmail, link your Google account to Claude:
+### Step 1.3: Verify Connections
 
-1. Go to **claude.ai** → **Settings** → **Integrations**
-2. Click **Connect** next to Google
-3. Authorize Gmail and Calendar access
-4. Restart Claude Code (close and reopen the terminal or app)
-5. Come back and type `/inbox-zero` again"
+**If Gmail:** List Gmail labels to verify the MCP connection. If it fails, read [mcp-setup.md](mcp-setup.md) and walk the user through connecting. Stop and wait for confirmation before proceeding.
 
-Stop here and wait for them to confirm before proceeding.
+**If Google Calendar:** List calendars to verify the connection. If it fails, reference [mcp-setup.md](mcp-setup.md). Continue even if unavailable — just note it in config.
 
-**If Outlook or Other:**
-Tell them: "Outlook and other clients are coming soon. Gmail is supported today." Stop.
+**If Notes folder:** Verify the folder path exists. Ask for a corrected path if it doesn't.
 
-### 3. Calendar
+**If Specific file:** Verify the file exists. Ask for a corrected path if it doesn't.
 
-Ask: "Would you like me to reference your calendar when drafting replies? This helps me suggest available times for scheduling-related emails.
-(1) Yes — Google Calendar *(recommended with Gmail)*
-(2) Skip"
+**If Notion:** Save the token and DB ID — no upfront verification needed.
 
-**If Google Calendar:** Try to list calendars to verify the connection. If it works, note `"type": "google_calendar"`. If it fails, tell the user to connect it the same way as Gmail (same claude.ai Integrations page).
+**If Outlook or Other:** Tell them Outlook is coming soon. Gmail is supported today. Stop.
 
-**If Skip:** Set `"calendar": { "type": "none" }`.
+### Step 1.4: Save Config
 
-### 4. Context Source
-
-Ask: "Where should I look for context when drafting replies? For example, notes about your projects, a resume, a CRM file, or a to-do list.
-
-(1) A folder of notes *(Obsidian, markdown files, etc.)*
-(2) A specific file *(any plain text or markdown file)*
-(3) Notion database *(requires an integration token)*
-(4) No context source"
-
-**If folder:**
-Ask: "What's the full path to your notes folder?"
-Examples: `~/notes`, `/Users/you/Obsidian/Work`, `C:\Users\you\Documents\Notes`
-Expand `~` to the full home path. Confirm the folder exists before saving.
-Save as `"type": "folder", "path": "<expanded path>"`.
-
-**If file:**
-Ask: "What's the full path to the file?"
-Confirm it exists. Save as `"type": "file", "path": "<expanded path>"`.
-
-**If Notion:**
-Tell the user:
-"You'll need two things:
-1. A Notion integration token — create one at notion.so/my-integrations (click 'New integration', give it a name, copy the Internal Integration Token)
-2. Share the database with your integration — open the database in Notion, click ··· → Connections → select your integration
-3. The database ID from the URL: notion.so/.../**{this-part}**?v=..."
-
-Ask for the token and database ID. Save as `"type": "notion", "token": "...", "db_id": "..."`.
-
-**If None:**
-Save as `"type": "none"`.
-
-### 5. Save Config
-
-Create `~/.inbox-zero/` and write the config file:
+Create `~/.inbox-zero/` and write `~/.inbox-zero/config.json`:
 
 ```bash
 mkdir -p ~/.inbox-zero
 ```
-
-Then write `~/.inbox-zero/config.json` with the user's choices:
 
 ```json
 {
@@ -125,7 +92,7 @@ Then write `~/.inbox-zero/config.json` with the user's choices:
   },
   "context": {
     "type": "folder",
-    "path": "/full/path/to/notes"
+    "path": "/full/expanded/path/to/notes"
   },
   "processing": {
     "days_back": 30,
@@ -135,105 +102,67 @@ Then write `~/.inbox-zero/config.json` with the user's choices:
 }
 ```
 
-Tell the user: "All set. Running your first triage now..."
-
-Then continue to Step 2.
+Tell the user: "All set. Starting triage..."
 
 ---
 
-## Step 2: Fetch Unread Emails
+## Phase 2: Fetch Emails
 
-Calculate the date 30 days ago from today (use `config.processing.days_back`, default 30).
+Calculate the date 30 days ago. Search Gmail:
+- Query: `is:unread after:YYYY/MM/DD`
+- Fetch up to `processing.max_emails` threads (default: 30)
 
-Search Gmail for unread threads using the query: `is:unread after:YYYY/MM/DD` where the date is 30 days ago.
-
-Fetch up to `config.processing.max_emails` threads (default: 30). For each thread, retrieve its full content.
-
-If no unread emails exist, tell the user: "Your inbox is clean — no unread emails in the last 30 days." and stop.
+If no unread emails: tell the user "Your inbox is clean — no unread emails in the last 30 days." Stop.
 
 ---
 
-## Step 3: Classify Each Email
+## Phase 3: Classify
 
-Classify each thread into exactly one category. Be decisive — every email gets a category.
+Read [classification-rules.md](classification-rules.md) for detailed criteria, then classify each thread:
 
-**action_needed** — the user needs to respond, decide, or act:
-- Direct question or request addressed to the user
-- Meeting invite, scheduling request, or RSVP
-- Document, contract, or form requiring review or signature
-- Time-sensitive item (deadline, payment due, offer expiring)
-- Interview request, job application status requiring a response
-- Collaboration request or delegated task
+- **action_needed** — requires a response, decision, or act from the user
+- **important** — worth reading, no reply needed
+- **noise** — safely ignored
 
-**important** — worth reading, no reply needed:
-- FYI status updates, merge request approvals, build results
-- Receipts, booking confirmations, shipping notifications
-- Reports or summaries worth reviewing
-- Personal updates from contacts
-
-**noise** — safely ignored:
-- Newsletters, digests, marketing emails, promotional offers
-- Social media notifications (LinkedIn activity, Twitter/X follows, etc.)
-- Automated alerts requiring no action from the user
-- Mass-sent announcements from services
-
-Build three lists as you classify.
+Be decisive. Every email gets exactly one category.
 
 ---
 
-## Step 4: Gather Context (Action-Needed Emails Only)
+## Phase 4: Context & Drafts *(Full Triage only — skip in Classify-Only mode)*
 
-For each `action_needed` email, collect context before drafting.
+For each `action_needed` email:
 
-**Calendar context** (skip if `calendar.type` is `"none"`):
-- Fetch the next `calendar.days_ahead` days of events (default: 7)
-- Note: free slots, busy periods, and meetings relevant to the email topic
+**4a. Gather calendar context** (skip if `calendar.type` is `"none"`):
+Fetch the next `calendar.days_ahead` days of events. Note free slots, busy periods, and anything relevant to the email topic.
 
-**Notes context** (skip if `context.type` is `"none"`):
+**4b. Gather notes context** (skip if `context.type` is `"none"`):
+- **folder**: Find 1–3 files in `context.path` most relevant to the email subject or sender. Prioritize `.md` and `.txt`. Cap at ~3000 tokens total.
+- **file**: Read the configured file (or a relevant section for large files).
+- **notion**: Query the database — see [classification-rules.md](classification-rules.md) for the API call pattern.
 
-- **folder**: Find files in `context.path` relevant to the email subject or sender. Prioritize `.md` and `.txt` files. Read the 1–3 most relevant files. Cap at ~3000 tokens of context total to stay efficient.
-- **file**: Read the configured file in full (or a relevant section for large files).
-- **notion**: Query the Notion database and extract relevant page titles and content:
-  ```bash
-  curl -s "https://api.notion.com/v1/databases/{db_id}/query" \
-    -H "Authorization: Bearer {token}" \
-    -H "Notion-Version: 2022-06-28" \
-    -H "Content-Type: application/json" \
-    -d '{"page_size": 20}'
-  ```
+**4c. Draft the reply:**
+Read [draft-guidelines.md](draft-guidelines.md) for tone, structure, and anti-patterns. Create the draft in Gmail, threaded to the original email.
+
+If you cannot write a useful draft (completely ambiguous request, no actionable content), mark it `draft_skipped` and note the reason.
 
 ---
 
-## Step 5: Draft Replies (Action-Needed Emails Only)
+## Phase 5: Apply Labels *(Full Triage only)*
 
-For each `action_needed` email, write a draft reply that:
-
-- **Matches the tone** — formal for HR/legal/professional, casual for colleagues and friends
-- **Is specific** — reference actual calendar slots, project names, or facts from context rather than vague acknowledgment
-- **Cuts filler** — no "I hope this email finds you well", "Please don't hesitate to reach out", or empty pleasantries
-- **Is proportionate in length** — a one-line email gets a one-line reply; a detailed request gets a thorough response
-- **Uses `[...]` for unknowns** — wherever the user needs to fill in information you don't have
-
-Create the draft in Gmail using the create_draft tool. Set the reply-to thread so it threads correctly.
-
-If you cannot write a useful draft (completely ambiguous request, missing critical context), mark the email as `draft_skipped` and note the reason in the triage report.
-
----
-
-## Step 6: Apply Labels
-
-Ensure these three labels exist in Gmail (create them if they don't):
-- `inbox-zero/action-needed`
-- `inbox-zero/important`
-- `inbox-zero/noise`
+Ensure these labels exist (create if missing):
+- `inbox-zero/action-needed` — red `#fb4c2f`
+- `inbox-zero/important` — orange `#ffad47`
+- `inbox-zero/noise` — gray `#999999`
 
 Apply the appropriate label to each thread.
 
+⚠️ **If label creation fails with "insufficient authentication scopes":** Skip labeling silently and note it in the report with the fix. See [mcp-setup.md](mcp-setup.md) for how to reconnect with write access.
+
 ---
 
-## Step 7: Print Triage Report
+## Phase 6: Report & Follow-Up
 
-Print a clean, scannable report to the conversation. Use this format:
+### Step 6.1: Print the Triage Report
 
 ```
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -251,42 +180,63 @@ ACTION NEEDED  ({N} emails, {N} drafts created)
      From: {Name} <{email}>
      Draft: [skipped — {reason}]
 
-  ...
-
 IMPORTANT, NO ACTION  ({N} emails)
 
   1. {Subject} — {sender}
   2. {Subject} — {sender}
-  ...
 
 NOISE  ({N} emails)
 
+  Newsletters & Digests
   1. {Subject} — {sender}
+
+  Promotions
   2. {Subject} — {sender}
-  ...
+
+  Automated Notifications
+  3. {Subject} — {sender}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Labels applied. Review your Gmail Drafts to send replies.
+{Labels applied. / ⚠️ Labels skipped — see note above.}
+{N drafts created. Review Gmail Drafts to send replies.}
 ```
 
+Group noise by sub-category (Newsletters, Promotions, Automated Notifications) for scannability.
+
+### Step 6.2: Offer Follow-Up
+
+After the report, ask:
+
+"Want to do anything else?
+(1) Schedule daily triage — run `/inbox-zero` automatically each morning
+(2) Process more emails — fetch the next 30
+(3) Fix Gmail write access — reconnect Google with full permissions
+(4) Done"
+
+Handle each:
+- **(1) Schedule:** Refer the user to `/schedule` to set up a recurring run.
+- **(2) More emails:** Re-run Phase 2 with the `nextPageToken` from the first fetch, then Phases 3–6.
+- **(3) Fix access:** Read [mcp-setup.md](mcp-setup.md) and walk the user through reconnecting with write scope.
+- **(4) Done:** Stop.
+
 ---
 
-## Reconfiguration
+## ⚠️ Gotchas
 
-If the user says "reset inbox-zero", "reconfigure inbox-zero", or "change my email/calendar/context":
-- Delete `~/.inbox-zero/config.json`
-- Re-run the Setup Wizard
-
-If the user says "show my inbox-zero config" or "inbox-zero settings":
-- Read and display `~/.inbox-zero/config.json` in a friendly format
+| Situation | Symptom | Fix |
+|-----------|---------|-----|
+| Gmail read-only scope | Label/draft creation fails with "insufficient authentication scopes" | Reconnect Google at claude.ai → Settings → Integrations with all Gmail boxes checked. See [mcp-setup.md](mcp-setup.md). |
+| Context folder too large | Slow triage, context window pressure | The skill already caps at 3000 tokens. If still slow, set `context.type` to `"file"` pointing at a focused reference doc. |
+| Notion token expired | Curl returns 401 | Create a new token at notion.so/my-integrations, run `reconfigure inbox-zero` to update. |
+| No emails found | "Inbox clean" message | The query only fetches unread. Mark emails unread in Gmail if you want them triaged again. |
+| Wrong emails classified | Mis-categorized threads | Classification rules are in [classification-rules.md](classification-rules.md) — they can be tuned. |
 
 ---
 
-## Error Handling
+## Supporting Files
 
-- **Gmail MCP unavailable**: Tell the user to connect Google at claude.ai → Settings → Integrations, then restart Claude Code.
-- **No unread emails**: Report clean inbox, stop.
-- **Calendar unavailable**: Skip calendar context, note it in report. Suggest connecting Google Calendar via claude.ai Integrations.
-- **Context path not found**: Skip context for that run, note it in report. Suggest the user run `reconfigure inbox-zero` to update the path.
-- **Notion API error**: Skip Notion context, print the error message, suggest verifying the token and database ID via `reconfigure inbox-zero`.
-- **Draft creation fails**: Mark as `draft_skipped`, note the error, continue with remaining emails.
+| File | Purpose | When to read |
+|------|---------|--------------|
+| [classification-rules.md](classification-rules.md) | Detailed criteria + examples for all three categories | Phase 3 (classify) |
+| [draft-guidelines.md](draft-guidelines.md) | Tone, structure, length, anti-patterns for drafts | Phase 4 (draft) |
+| [mcp-setup.md](mcp-setup.md) | Step-by-step Gmail + Calendar MCP connection guide | Phase 1 (setup) + Gotchas |
