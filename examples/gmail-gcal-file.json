@@ -1,0 +1,19 @@
+{
+  "_comment": "Gmail + Google Calendar + a single context file (resume, bio, project reference, etc.)",
+  "email": {
+    "type": "gmail"
+  },
+  "calendar": {
+    "type": "google_calendar",
+    "days_ahead": 7
+  },
+  "context": {
+    "type": "file",
+    "path": "/Users/you/Documents/context.md"
+  },
+  "processing": {
+    "days_back": 30,
+    "max_emails": 30
+  },
+  "onboarding_complete": true
+}
