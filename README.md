@@ -186,6 +186,7 @@ Labels applied. 2 drafts created. Review Gmail Drafts to send replies.
 
 | Problem | Fix |
 |---------|-----|
+| Draft has `Outlook-*.png` attachments | Sender uses Outlook — Gmail pulls their inline signature images into the reply. Delete them before sending. |
 | Drafts or labels fail with "insufficient authentication scopes" | Reconnect Google via **claude.ai web** (not desktop app), check **all** Gmail permission boxes, restart Claude Code |
 | "This app is blocked" when connecting | You're signing into a managed Google Workspace account. Use a personal Gmail instead. |
 | No emails found | The skill only fetches unread threads. Mark emails unread in Gmail if you want them triaged again. |

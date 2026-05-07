@@ -254,6 +254,7 @@ Handle each:
 
 | Situation | Symptom | Fix |
 |-----------|---------|-----|
+| Outlook-*.png attachments on draft | Sender uses Outlook — Gmail pulls inline signature images into the reply thread | Delete the attachments before sending. They are not part of your reply. |
 | Gmail read-only scope | Label/draft creation fails with "insufficient authentication scopes" | Reconnect Google at claude.ai → Settings → Integrations with all Gmail boxes checked. See [mcp-setup.md](mcp-setup.md). |
 | Context folder too large | Slow triage, context window pressure | The skill already caps at 3000 tokens. If still slow, set `context.type` to `"file"` pointing at a focused reference doc. |
 | Notion token expired | Curl returns 401 | Create a new token at notion.so/my-integrations, run `reconfigure inbox-zero` to update. |
